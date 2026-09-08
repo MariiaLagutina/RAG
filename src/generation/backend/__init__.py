@@ -1,32 +1,26 @@
-"""Grounded answer-generation components."""
+"""Configure local language-model generation backends."""
 
-from src.generation.backend import (
-    ChatMessage,
+from src.generation.backend.config import (
     DEFAULT_MODEL_NAME,
     DevicePreference,
-    GenerationBackendLoadError,
     GenerationConfig,
+    select_device,
+)
+from src.generation.backend.generator import (
+    ChatMessage,
     GenerationError,
+    generate_answer,
+)
+from src.generation.backend.runtime import (
+    GenerationBackendLoadError,
     GenerationRuntime,
     LoadedGenerationBackend,
     TransformersRuntime,
-    generate_answer,
     load_generation_backend,
-    select_device,
-)
-from src.generation.context import (
-    ContextBuildResult,
-    ContextBuilder,
-    HuggingFaceTokenCounter,
-    TokenCounter,
-    build_context,
-    load_ranked_source_texts,
 )
 
 __all__ = [
     "ChatMessage",
-    "ContextBuildResult",
-    "ContextBuilder",
     "DEFAULT_MODEL_NAME",
     "DevicePreference",
     "GenerationBackendLoadError",
@@ -34,12 +28,8 @@ __all__ = [
     "GenerationError",
     "GenerationRuntime",
     "LoadedGenerationBackend",
-    "HuggingFaceTokenCounter",
-    "TokenCounter",
     "TransformersRuntime",
-    "build_context",
     "generate_answer",
     "load_generation_backend",
-    "load_ranked_source_texts",
     "select_device",
 ]
