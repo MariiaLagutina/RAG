@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from src.generation import (
+    GROUNDING_PROMPT_VERSION,
     ContextBuildResult,
     GenerationConfig,
     GroundedAnswerResult,
@@ -111,6 +112,7 @@ def test_answer_query_composes_retrieval_context_and_generation() -> None:
         context,
         backend,
         generation_config,
+        citations_required=False,
     )
     assert result.answer == grounded.answer
     assert result.retrieved_sources == tuple(retrieved)
@@ -134,7 +136,7 @@ def test_answer_query_reuses_hit_before_loading_model(
     grounded = GroundedAnswerResult(
         answer="The cache uses LRU. [Source 1]",
         sources=context.sources,
-        prompt_version="v1",
+        prompt_version=GROUNDING_PROMPT_VERSION,
     )
     backend = LoadedGenerationBackend(object(), object(), "cpu")
     config = GenerationConfig()

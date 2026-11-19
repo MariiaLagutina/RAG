@@ -112,11 +112,14 @@ def create_app(
                 HuggingFaceTokenCounter(backend.tokenizer),
                 request.context_token_budget,
             )
+            # Same policy as the CLI and batch answers: labels are optional,
+            # but any label the model writes must reference a prompt source.
             grounded_answer = generate_grounded_answer(
                 request.question,
                 context,
                 backend,
                 answer_state.generation_config,
+                citations_required=False,
             )
         except (OSError, UnicodeError, ValueError, RuntimeError) as error:
             raise HTTPException(
