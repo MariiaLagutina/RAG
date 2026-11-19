@@ -193,9 +193,11 @@ choices are recorded in
 
 Retrieved locations are read from the corpus, deduplicated, labelled as
 sources, and added whole while they fit the context token budget. Qwen is
-loaded once per process and reused for batch generation. Single-query answers
-apply deterministic citation validation; invalid grounding becomes a
-controlled error rather than an unverified answer.
+loaded once per process and reused for batch generation. The CLI `answer`,
+`answer_dataset`, and the API `/answer` share one deterministic citation
+policy: `[Source N]` labels are optional, but a label that refers to a source
+outside the prompt becomes a controlled error rather than an unverified
+answer. The exact insufficient-context reply is always accepted.
 
 The small mandatory model has known reasoning limits. The project guarantees a
 traceable evidence path and controlled behavior, not perfect prose.
@@ -223,8 +225,10 @@ uv run uvicorn 'src.api:create_app' --factory --host 127.0.0.1 --port 8000
 
 ## Performance Analysis
 
-Measurements below were reproduced on the development Linux machine. Timing
-depends on hardware; the assignment limits are the acceptance criteria.
+Measurements below were reproduced on the development Linux machine. Recall
+values are measured on the public datasets shipped with the assignment
+(100 Docs and 99 Code questions). Timing depends on hardware; the assignment
+limits are the acceptance criteria.
 
 | Measure | Result | Required limit |
 | --- | ---: | ---: |
@@ -234,7 +238,7 @@ depends on hardware; the assignment limits are the acceptance criteria.
 | Code Recall@5 / Recall@10 | 0.787879 / 0.848485 | Recall@5 >= 0.50 |
 | Optional Docs hybrid Recall@5 / Recall@10 | 0.870000 / 0.910000 | bonus measurement |
 | Incremental reindex, one changed file | 7.1 s | bonus measurement |
-| Full automated test suite | 579 passed | all checks pass |
+| Full automated test suite | 584 passed | all checks pass |
 
 Recall is measured independently for Docs and Code. MRR and Recall@1/3/5/10
 are available through `evaluate` and `evaluate_all`; the external moulinette
@@ -267,8 +271,9 @@ Reconsidered decisions and rejected experiments are recorded in
   path signals improved ranking without changing returned evidence.
 - Semantic retrieval helped selected Docs questions but reduced aggregate
   performance when applied universally; hybrid retrieval is therefore scoped.
-- Small-model generation sometimes omitted or invented citations; deterministic
-  validation makes this limitation visible.
+- Small-model generation sometimes omitted or invented citations. Requiring a
+  label rejected otherwise grounded answers, so labels are optional while
+  invented labels are still rejected deterministically.
 - Fine-tuning on 100 curated examples produced no material improvement and was
   removed from production rather than retained as unused complexity.
 - Incremental and cached artifacts required explicit identity and integrity
@@ -279,7 +284,7 @@ Reconsidered decisions and rejected experiments are recorded in
 Current checks:
 
 ```text
-pytest: 579 passed
+pytest: 584 passed
 flake8: passed
 mypy with assignment flags: passed for 239 source files
 mypy --strict: passed for 239 source files

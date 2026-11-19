@@ -148,10 +148,13 @@ sequenceDiagram
     Validator-->>User: grounded answer or controlled error
 ```
 
-The single-query path applies stricter deterministic citation validation than
-the assignment requires. The batch path preserves the required output schema
-and records model limitations rather than treating perfect phrasing as a
-mandatory pass condition.
+The CLI `answer`, `answer_dataset`, and the API `/answer` apply the same
+deterministic citation policy. A missing `[Source N]` label does not reject an
+otherwise grounded answer, because the small model often omits labels. A label
+that refers to a source outside the prompt is rejected as a controlled error,
+and the exact insufficient-context reply is always accepted. The batch path
+preserves the required output schema and records model limitations rather than
+treating perfect phrasing as a mandatory pass condition.
 
 ## Persistence and compatibility
 

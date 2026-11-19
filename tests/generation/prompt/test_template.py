@@ -1,4 +1,4 @@
-"""Tests for grounded prompt template version v2."""
+"""Tests for the grounded answer prompt template."""
 
 import pytest
 
@@ -21,7 +21,7 @@ def _context(text: str) -> ContextBuildResult:
 
 
 def test_prompt_version_and_grounding_rules_are_explicit() -> None:
-    """Version v2 defines source use, citations, conflicts, and fallback."""
+    """The prompt defines source use, citations, conflicts, and fallback."""
     system, _ = build_grounded_messages(
         "Where is caching defined?", _context("x")
     )
@@ -39,7 +39,7 @@ def test_prompt_version_and_grounding_rules_are_explicit() -> None:
 
 
 def test_prompt_has_no_conflict_prefix_for_the_model_to_echo() -> None:
-    """The quoted v1 conflict prefix was copied into ordinary answers."""
+    """No quoted conflict prefix exists for the model to copy."""
     system, user = build_grounded_messages(
         "Where is caching defined?", _context("x")
     )

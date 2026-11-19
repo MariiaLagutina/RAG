@@ -10,10 +10,7 @@ INSUFFICIENT_CONTEXT_RESPONSE = (
     "this question."
 )
 
-# v2 states the conflict rule once and without a quoted answer prefix:
-# the small default model copied v1's "The sources conflict:" into most
-# answers, including answers whose sources agreed.
-_SYSTEM_PROMPT_V2 = "\n".join(
+_SYSTEM_PROMPT = "\n".join(
     (
         "You answer questions about a software project.",
         "",
@@ -39,7 +36,7 @@ def build_grounded_messages(
     question: str,
     context: ContextBuildResult,
 ) -> tuple[ChatMessage, ChatMessage]:
-    """Place one question and bounded context under prompt version v2."""
+    """Place one question and bounded context in the grounding prompt."""
     normalized_question = question.strip()
     if not normalized_question:
         raise ValueError("Grounded-answer question must not be empty")
@@ -57,6 +54,6 @@ def build_grounded_messages(
         "</answer_task>"
     )
     return (
-        ChatMessage(role="system", content=_SYSTEM_PROMPT_V2),
+        ChatMessage(role="system", content=_SYSTEM_PROMPT),
         ChatMessage(role="user", content=user_content),
     )
