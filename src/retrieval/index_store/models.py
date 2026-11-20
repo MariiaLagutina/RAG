@@ -24,6 +24,7 @@ class StoredDocument(BaseModel):
     content_terms: tuple[str, ...]
     metadata_terms: tuple[str, ...]
     identifier_terms: tuple[str, ...]
+    content_length: int | None = None
 
 
 class StoredFileFingerprint(BaseModel):

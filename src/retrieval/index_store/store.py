@@ -18,7 +18,7 @@ from src.retrieval.index_store.models import (
     StoredParameters,
 )
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
@@ -182,6 +182,7 @@ def _snapshot_from_index(
                 content_terms=document.content_terms,
                 metadata_terms=document.metadata_terms,
                 identifier_terms=document.identifier_terms,
+                content_length=document.content_length,
             )
             for document in index.documents
         ),
@@ -210,6 +211,7 @@ def _document_from_stored(document: StoredDocument) -> BM25Document:
         content_terms=document.content_terms,
         metadata_terms=document.metadata_terms,
         identifier_terms=document.identifier_terms,
+        content_length=document.content_length,
     )
 
 

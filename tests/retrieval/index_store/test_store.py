@@ -20,9 +20,10 @@ def _index() -> BM25Index:
     documents = [
         BM25Document(
             chunk=Chunk("docs/cache.md", 0, 5, "cache", ("Cache",)),
-            content_terms=("cache",),
+            content_terms=("cache", "c", "ache"),
             metadata_terms=("docs", "cache"),
             identifier_terms=(),
+            content_length=1,
         ),
         BM25Document(
             chunk=Chunk("src/cache.py", 0, 6, "lookup"),

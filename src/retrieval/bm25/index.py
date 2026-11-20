@@ -39,7 +39,7 @@ class BM25Index:
         _validate_unique_keys(self._documents)
 
         self._content_lengths = tuple(
-            len(document.content_terms) for document in self._documents
+            document.scoring_content_length for document in self._documents
         )
         self._metadata_lengths = tuple(
             len(document.metadata_terms) for document in self._documents

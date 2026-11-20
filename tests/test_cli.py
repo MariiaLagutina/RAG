@@ -499,12 +499,12 @@ def test_index_command_builds_current_schema_snapshot(
 
     index_path = tmp_path / "data" / "processed" / "test-index.json"
     payload = json.loads(index_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 3
+    assert payload["schema_version"] == SCHEMA_VERSION
     assert len(payload["corpus_fingerprint"]) == 64
     assert len(payload["pipeline_fingerprint"]) == 64
     captured = capsys.readouterr()
     assert "document_count:" in captured.out
-    assert "schema_version:       3" in captured.out
+    assert f"schema_version:       {SCHEMA_VERSION}" in captured.out
 
 
 def test_index_command_persists_requested_bm25_parameters(

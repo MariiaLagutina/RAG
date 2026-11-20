@@ -12,7 +12,11 @@ from src.ingestion import (
     SourceDocument,
 )
 from src.retrieval.bm25.models import BM25Document
-from src.retrieval.tokenization import CodeTokenizer, TextTokenizer
+from src.retrieval.tokenization import (
+    CodeTokenizer,
+    ContentTextTokenizer,
+    TextTokenizer,
+)
 
 
 def build_bm25_documents(
@@ -33,7 +37,7 @@ def build_bm25_documents(
     content_tokenizer = (
         CodeTokenizer()
         if document.kind is FileKind.PYTHON
-        else TextTokenizer()
+        else ContentTextTokenizer()
     )
 
     documents: list[BM25Document] = []
@@ -42,12 +46,21 @@ def build_bm25_documents(
         content_terms = tuple(content_tokenizer.tokenize(chunk.text))
         if not content_terms:
             continue
+        # Python content keeps its own term count. Other content adds
+        # identifier parts for matching only, so its length counts the
+        # original text tokens.
+        content_length = (
+            None
+            if document.kind is FileKind.PYTHON
+            else len(TextTokenizer().tokenize(chunk.text))
+        )
         documents.append(
             BM25Document(
                 chunk=chunk,
                 content_terms=content_terms,
                 metadata_terms=_metadata_terms(chunk, symbols),
                 identifier_terms=_identifier_terms(chunk, identifiers),
+                content_length=content_length,
             )
         )
     return documents
