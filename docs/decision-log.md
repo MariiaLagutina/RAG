@@ -1690,3 +1690,61 @@ specific CLI commands rather than every retrieval-adjacent interface.
 "Load once at startup" is not one rule when a server holds two resources
 with very different costs. The right boundary follows the cost and the
 usage pattern of each resource, not a uniform policy applied to both.
+
+## 2026-11-20 - Align documentation terms with queries and route Docs datasets to hybrid retrieval
+
+**Status:** Accepted
+
+### Initial approach
+
+Every dataset used the same BM25 ranking. Query terms were expanded with
+identifier parts (`vLLM` → `vllm`, `v`, `llm`), but documentation content was
+indexed without them, while Python content and all metadata contained them.
+Text files were always split at headings, so a short page could become several
+heading-sized chunks. Hybrid retrieval existed only as a separate command.
+
+### Why the approach was reconsidered
+
+Question-level failure analysis identified three general ranking mechanisms.
+Question words in the short metadata field let question-shaped headings
+outrank relevant passages. Splitting a short page at its headings separated
+its title terms from its body. Identifiers written in documentation could not
+match the query parts that the same identifiers matched in code, so code
+chunks won on the split parts alone.
+
+Two alternatives were rejected. Adding inflection stems counted one word
+several times in BM25. Grouping each word's terms into one best-term score
+removed the evidence that a code identifier matches all of its parts (public
+Code Recall@5 0.788 → 0.687).
+
+### Decision
+
+- Ignore function words when scoring the metadata field only.
+- Keep a text file that fits within the maximum chunk size as one chunk.
+- Give documentation and other text content the same identifier parts as the
+  query, and measure its BM25 length in original words.
+- Build a documentation-only MiniLM index during `index`, and let
+  `search_dataset --retrieval_mode auto` use weighted RRF for datasets named
+  as Docs while every other dataset stays on BM25.
+
+### Consequences
+
+- Public Docs Recall@5 with BM25 rose from 0.850 to 0.890 (Recall@10 0.900 →
+  0.920). With hybrid fusion, Docs Recall@5 is 0.880, Recall@1 0.65, Recall@10
+  0.930, and MRR 0.749; Code output is byte-identical to BM25 only (Recall@5
+  0.788).
+- The stored index schema is now version 4, with chunker version 2 and
+  tokenizer version 3; earlier indexes require a reindex.
+- `index` loads the pinned embedding model and falls back to BM25 only when it
+  is unavailable. Indexing takes about 54 s with a cached model and 72 s with
+  an empty cache.
+- Routing depends on the documented dataset naming convention and can be
+  overridden explicitly.
+
+### Lesson
+
+Derived matching terms help only when the document and query sides are
+analysed the same way, and they must not change how BM25 measures length or
+how many times one source word counts. Code and prose need different
+treatment of identifier parts, which is why the two dataset types use
+different retrieval strategies.

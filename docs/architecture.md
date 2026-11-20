@@ -44,8 +44,11 @@ flowchart TD
     Terms["Content + metadata terms"]
     BM25["BM25 index"]
     Store["Versioned JSON snapshot"]
+    Semantic["Docs-only MiniLM index"]
+    Route{"search_dataset mode"}
     Search["Query tokenization + retrieval"]
     Rerank["Auxiliary-path reranker"]
+    Fusion["Weighted RRF with semantic ranks"]
     Results["Exact source spans"]
     Context["Deduplicated token budget"]
     Model["Qwen/Qwen3-0.6B"]
@@ -56,7 +59,11 @@ flowchart TD
     Dispatch -->|Python| Py --> Terms
     Dispatch -->|Markdown/text| Text --> Terms
     Terms --> BM25 --> Store
-    Store --> Search --> Rerank --> Results
+    Store -. documentation chunks .-> Semantic
+    Store --> Search --> Rerank --> Route
+    Route -->|Code, bm25, unknown name| Results
+    Route -->|Docs, hybrid| Fusion --> Results
+    Semantic -. semantic ranks .-> Fusion
     Results --> Context --> Model --> Output
     Results --> Eval
 ```
@@ -71,6 +78,9 @@ flowchart TD
   terms are stored separately for ranking.
 - Retrieval produces assignment-compatible locations before generation begins.
   The evaluator therefore measures retrieval independently of Qwen quality.
+- Docs datasets add semantic ranks on top of BM25; Code datasets, unknown
+  dataset names, and single-query commands use BM25 only. BM25 is therefore
+  part of every retrieval path.
 - Generation receives a bounded context rather than raw top-k text, keeping
   token budgeting and source traceability deterministic.
 
@@ -84,6 +94,7 @@ sequenceDiagram
     participant Chunker
     participant BM25
     participant Store
+    participant MiniLM
 
     User->>CLI: index --max_chunk_size 2000
     CLI->>Discovery: discover supported corpus files
@@ -94,13 +105,25 @@ sequenceDiagram
     end
     CLI->>BM25: build lexical documents and postings
     CLI->>Store: save corpus/pipeline-bound snapshot
-    Store-->>User: counts and fingerprints
+    CLI->>MiniLM: load pinned model (download once, then cache)
+    MiniLM-->>CLI: embeddings of documentation chunks only
+    CLI->>Store: save semantic index with the same fingerprints
+    Store-->>User: counts, fingerprints, semantic status
 ```
+
+The semantic step runs only after the BM25 snapshot is saved. If the model
+cannot be loaded or encoding fails, `index` prints a warning, reports
+`semantic_index: unavailable`, and still succeeds with the complete BM25
+index. The semantic store writes vectors and metadata to temporary files and
+replaces each file atomically, vectors first; the metadata records the vectors'
+checksum, so an interrupted write is detected and rejected on load rather than
+used.
 
 Incremental indexing changes only the loop: unchanged files may reuse stored
 lexical documents after file, pipeline, schema, and snapshot-integrity checks.
 The final index must remain byte-for-byte equivalent to a full rebuild of the
-same corpus state.
+same corpus state. The documentation semantic index is re-encoded in full on
+every run.
 
 ## Search and evaluation sequence
 
@@ -113,14 +136,19 @@ sequenceDiagram
     participant Retriever
     participant Evaluator
 
-    User->>CLI: search_dataset(dataset, k, output)
+    User->>CLI: search_dataset(dataset, k, output, retrieval_mode=auto)
+    CLI->>CLI: resolve mode from the dataset file name
     CLI->>Corpus: calculate current fingerprint
     CLI->>Store: load compatible index
     Store-->>CLI: validated BM25 index
-    loop Questions in input order
-        CLI->>Retriever: raw question + k
-        Retriever-->>CLI: ranked exact source spans
+    alt Docs dataset or hybrid mode
+        CLI->>Store: load semantic index with matching fingerprints
+        Store-->>CLI: validated semantic index, or BM25 fallback
+        CLI->>Retriever: BM25 top 20 + semantic top 20, weighted RRF
+    else Code dataset, bm25 mode, or unknown name
+        CLI->>Retriever: BM25 with auxiliary-path reranking
     end
+    Retriever-->>CLI: ranked exact source spans per question
     CLI-->>User: StudentSearchResults JSON
     User->>Evaluator: results + answered dataset
     Evaluator-->>User: Recall@1/3/5/10 and MRR
@@ -180,6 +208,11 @@ These identities answer different questions:
 - the **schema version** proves that stored fields have known semantics;
 - the **snapshot checksum** detects accidental damage to stored evidence.
 
+The semantic index records the BM25 corpus and pipeline fingerprints together
+with the model name and pinned revision, plus a checksum of its embedding
+matrix. A hybrid search rejects it when any of these differ from the current
+BM25 index and model configuration, and then falls back to BM25.
+
 ## Optional bonuses
 
 ```mermaid
@@ -201,10 +234,15 @@ flowchart TD
     Mandatory -. reusable workflows .-> API
 ```
 
-The bonuses do not silently replace the mandatory route:
+The bonuses keep the mandatory BM25 route in place:
 
 - semantic-only search remains optional because it scored below BM25;
-- hybrid retrieval is explicitly selected for Docs and leaves Code on BM25;
+- hybrid retrieval is selected for Docs datasets by `search_dataset`'s default
+  `auto` mode, documented and overridable with `--retrieval_mode bm25`; Code
+  always stays on BM25;
+- `index` builds the documentation-only semantic index, while
+  `index_semantic` still encodes all chunks into the same default directory
+  (see the [README](../README.md#optional-bonuses));
 - caches use complete compatibility keys and can be omitted;
 - the HTTP API reuses domain workflows while the required CLI remains intact;
 - all bonus behavior is expected to run on CPU-only campus machines.
