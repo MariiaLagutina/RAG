@@ -72,6 +72,7 @@ from src.retrieval.validation import (
     validate_retrieval_file,
 )
 from src.retrieval.tokenization import require_searchable_query
+from src.retrieval.mode import resolve_retrieval_mode
 
 
 DEFAULT_INDEX_PATH = Path("data/processed/bm25-index.json")
@@ -716,14 +717,42 @@ def search_dataset(
     identifier_candidate_depth: int = 0,
     auxiliary_path_penalty: float = DEFAULT_AUXILIARY_PATH_PENALTY,
     path_candidate_depth: int = DEFAULT_PATH_CANDIDATE_DEPTH,
+    retrieval_mode: str = "auto",
+    semantic_index_directory: str = str(DEFAULT_SEMANTIC_INDEX_DIRECTORY),
 ) -> str:
-    """Search one question dataset and save its validated result JSON."""
+    """Search one question dataset and save its validated result JSON.
+
+    ``retrieval_mode`` is ``auto``, ``bm25`` or ``hybrid``. ``auto`` uses
+    hybrid retrieval for datasets whose file name contains ``docs`` and
+    BM25 for every other dataset. Hybrid falls back to BM25 when the
+    documentation semantic index or its model is unavailable.
+    """
     try:
         _require_positive_k(k)
         root = Path(project_root)
         dataset = _below_root(root, Path(dataset_path))
         output = _below_root(root, Path(save_directory)) / dataset.name
         fingerprint = _current_corpus_fingerprint(root, Path(corpus_root))
+        mode = resolve_retrieval_mode(retrieval_mode, dataset)
+        pipeline_fingerprint = _current_pipeline_fingerprint(
+            _pipeline_config(
+                max_chunk_size,
+                k1,
+                b,
+                metadata_weight,
+                identifier_weight,
+            )
+        )
+        if mode == "hybrid" and _try_hybrid_dataset_search(
+            _below_root(root, Path(index_path)),
+            _below_root(root, Path(semantic_index_directory)),
+            dataset,
+            output,
+            k,
+            corpus_fingerprint=fingerprint,
+            pipeline_fingerprint=pipeline_fingerprint,
+        ):
+            return str(output)
         run_stored_retrieval(
             _below_root(root, Path(index_path)),
             fingerprint,
@@ -748,6 +777,40 @@ def search_dataset(
     except (OSError, UnicodeError, ValueError) as error:
         raise CliError(_error_message(error)) from None
     return str(output)
+
+
+def _try_hybrid_dataset_search(
+    index_path: Path,
+    semantic_index_directory: Path,
+    dataset: Path,
+    output: Path,
+    k: int,
+    *,
+    corpus_fingerprint: str,
+    pipeline_fingerprint: str,
+) -> bool:
+    """Run default hybrid retrieval; report False to request BM25."""
+    try:
+        run_stored_hybrid_retrieval(
+            index_path,
+            semantic_index_directory,
+            dataset,
+            output,
+            k,
+            max(k, DEFAULT_PATH_CANDIDATE_DEPTH),
+            SemanticEncoderConfig(),
+            corpus_fingerprint=corpus_fingerprint,
+            pipeline_fingerprint=pipeline_fingerprint,
+            rrf_parameters=RRFParameters(),
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        print(
+            "Warning: hybrid retrieval unavailable "
+            f"({_error_message(error)}); using BM25 only",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def _progress_questions(
