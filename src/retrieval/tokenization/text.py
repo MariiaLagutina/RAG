@@ -1,5 +1,6 @@
 """Tokenize documentation without aggressive linguistic normalization."""
 
+from src.retrieval.tokenization.code import expand_code_lexeme
 from src.retrieval.tokenization.shared import normalize_lexeme, scan_lexemes
 
 
@@ -35,3 +36,26 @@ def expand_text_lexeme(lexeme: str) -> list[str]:
         tokens.append(normalized_base)
 
     return tokens
+
+
+class ContentTextTokenizer:
+    """Analyze non-Python content with the same per-lexeme terms as queries.
+
+    Queries combine text and code expansion, and Python content and
+    metadata already receive identifier components. Applying both expansions
+    to each lexeme here keeps term frequency and lets identifiers written in
+    documentation (``scaled_mm``, ``OpenAI``) match their query components.
+    """
+
+    def tokenize(self, text: str) -> list[str]:
+        """Return text terms followed by any additional identifier parts."""
+        tokens: list[str] = []
+        for lexeme in scan_lexemes(text):
+            terms = expand_text_lexeme(lexeme)
+            terms.extend(
+                term
+                for term in expand_code_lexeme(lexeme)
+                if term not in terms
+            )
+            tokens.extend(terms)
+        return tokens

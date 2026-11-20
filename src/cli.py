@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+import sys
 
 import uvicorn
 from tqdm import tqdm
@@ -43,7 +44,7 @@ from src.retrieval import (
     run_stored_search,
 )
 from src.retrieval.cache import SearchResultCache
-from src.retrieval.bm25 import BM25Parameters
+from src.retrieval.bm25 import BM25Index, BM25Parameters
 from src.retrieval.index_store import (
     IndexStore,
     PipelineConfig,
@@ -61,6 +62,7 @@ from src.retrieval.semantic import (
     DEFAULT_SEMANTIC_REVISION,
     SemanticEncoderConfig,
     build_and_store_semantic_index,
+    is_documentation_document,
     run_stored_semantic_retrieval,
     run_stored_semantic_search,
 )
@@ -70,6 +72,7 @@ from src.retrieval.validation import (
     validate_retrieval_file,
 )
 from src.retrieval.tokenization import require_searchable_query
+from src.retrieval.mode import resolve_retrieval_mode
 
 
 DEFAULT_INDEX_PATH = Path("data/processed/bm25-index.json")
@@ -283,8 +286,9 @@ def index(
     b: float = DEFAULT_BM25_PARAMETERS.b,
     metadata_weight: float = DEFAULT_BM25_PARAMETERS.metadata_weight,
     identifier_weight: float = DEFAULT_BM25_PARAMETERS.identifier_weight,
+    semantic_index_directory: str = str(DEFAULT_SEMANTIC_INDEX_DIRECTORY),
 ) -> dict[str, object]:
-    """Build and save a production-compatible BM25 index."""
+    """Build the BM25 index, then the documentation semantic index."""
     try:
         root = Path(project_root)
         config = _pipeline_config(
@@ -309,9 +313,16 @@ def index(
             build.pipeline_fingerprint,
             incremental.file_fingerprints,
         )
+        semantic_status = _build_documentation_semantic_index(
+            build.index,
+            _below_root(root, Path(semantic_index_directory)),
+            corpus_fingerprint=build.corpus_fingerprint,
+            pipeline_fingerprint=build.pipeline_fingerprint,
+        )
     except (OSError, UnicodeError, ValueError) as error:
         raise CliError(_error_message(error)) from None
     return {
+        **semantic_status,
         "index_path": str(output_path),
         "schema_version": SCHEMA_VERSION,
         "document_count": len(build.index.documents),
@@ -320,6 +331,44 @@ def index(
         "total_file_count": incremental.total_file_count,
         "reused_file_count": incremental.reused_file_count,
         "rebuilt_file_count": incremental.rebuilt_file_count,
+    }
+
+
+def _build_documentation_semantic_index(
+    lexical_index: BM25Index,
+    output_directory: Path,
+    *,
+    corpus_fingerprint: str,
+    pipeline_fingerprint: str,
+) -> dict[str, object]:
+    """Embed documentation chunks; on failure keep BM25-only retrieval.
+
+    The BM25 index is already saved. Any model, download, or encoding
+    failure is reported as a warning so that indexing still succeeds and
+    documentation searches fall back to BM25.
+    """
+    config = SemanticEncoderConfig()
+    try:
+        report = build_and_store_semantic_index(
+            lexical_index,
+            output_directory,
+            config,
+            corpus_fingerprint=corpus_fingerprint,
+            pipeline_fingerprint=pipeline_fingerprint,
+            include=is_documentation_document,
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        print(
+            "Warning: documentation semantic index unavailable "
+            f"({_error_message(error)}); searches will use BM25 only",
+            file=sys.stderr,
+        )
+        return {"semantic_index": "unavailable"}
+    return {
+        "semantic_index": str(output_directory),
+        "semantic_document_count": report.document_count,
+        "semantic_model_load_seconds": round(report.model_load_seconds, 2),
+        "semantic_encoding_seconds": round(report.encoding_seconds, 2),
     }
 
 
@@ -668,14 +717,42 @@ def search_dataset(
     identifier_candidate_depth: int = 0,
     auxiliary_path_penalty: float = DEFAULT_AUXILIARY_PATH_PENALTY,
     path_candidate_depth: int = DEFAULT_PATH_CANDIDATE_DEPTH,
+    retrieval_mode: str = "auto",
+    semantic_index_directory: str = str(DEFAULT_SEMANTIC_INDEX_DIRECTORY),
 ) -> str:
-    """Search one question dataset and save its validated result JSON."""
+    """Search one question dataset and save its validated result JSON.
+
+    ``retrieval_mode`` is ``auto``, ``bm25`` or ``hybrid``. ``auto`` uses
+    hybrid retrieval for datasets whose file name contains ``docs`` and
+    BM25 for every other dataset. Hybrid falls back to BM25 when the
+    documentation semantic index or its model is unavailable.
+    """
     try:
         _require_positive_k(k)
         root = Path(project_root)
         dataset = _below_root(root, Path(dataset_path))
         output = _below_root(root, Path(save_directory)) / dataset.name
         fingerprint = _current_corpus_fingerprint(root, Path(corpus_root))
+        mode = resolve_retrieval_mode(retrieval_mode, dataset)
+        pipeline_fingerprint = _current_pipeline_fingerprint(
+            _pipeline_config(
+                max_chunk_size,
+                k1,
+                b,
+                metadata_weight,
+                identifier_weight,
+            )
+        )
+        if mode == "hybrid" and _try_hybrid_dataset_search(
+            _below_root(root, Path(index_path)),
+            _below_root(root, Path(semantic_index_directory)),
+            dataset,
+            output,
+            k,
+            corpus_fingerprint=fingerprint,
+            pipeline_fingerprint=pipeline_fingerprint,
+        ):
+            return str(output)
         run_stored_retrieval(
             _below_root(root, Path(index_path)),
             fingerprint,
@@ -700,6 +777,40 @@ def search_dataset(
     except (OSError, UnicodeError, ValueError) as error:
         raise CliError(_error_message(error)) from None
     return str(output)
+
+
+def _try_hybrid_dataset_search(
+    index_path: Path,
+    semantic_index_directory: Path,
+    dataset: Path,
+    output: Path,
+    k: int,
+    *,
+    corpus_fingerprint: str,
+    pipeline_fingerprint: str,
+) -> bool:
+    """Run default hybrid retrieval; report False to request BM25."""
+    try:
+        run_stored_hybrid_retrieval(
+            index_path,
+            semantic_index_directory,
+            dataset,
+            output,
+            k,
+            max(k, DEFAULT_PATH_CANDIDATE_DEPTH),
+            SemanticEncoderConfig(),
+            corpus_fingerprint=corpus_fingerprint,
+            pipeline_fingerprint=pipeline_fingerprint,
+            rrf_parameters=RRFParameters(),
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        print(
+            "Warning: hybrid retrieval unavailable "
+            f"({_error_message(error)}); using BM25 only",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def _progress_questions(

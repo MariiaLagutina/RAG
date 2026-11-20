@@ -3,6 +3,7 @@
 from src.retrieval.semantic.builder import (
     SemanticTextEncoder,
     build_semantic_index,
+    is_documentation_document,
 )
 from src.retrieval.semantic.config import (
     DEFAULT_SEMANTIC_MODEL,
@@ -50,6 +51,7 @@ __all__ = [
     "SemanticTextEncoder",
     "SEMANTIC_SCHEMA_VERSION",
     "build_semantic_index",
+    "is_documentation_document",
     "build_and_store_semantic_index",
     "load_semantic_backend",
     "run_stored_semantic_retrieval",

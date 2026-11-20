@@ -8,8 +8,8 @@ from src.ingestion.chunking.orchestrator import MAX_CHUNK_SIZE
 from src.retrieval.bm25 import BM25Parameters
 
 
-CHUNKER_VERSION = 1
-TOKENIZER_VERSION = 2
+CHUNKER_VERSION = 2
+TOKENIZER_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)

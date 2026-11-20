@@ -11,7 +11,10 @@ from src.models import (
     RetrievalResults,
 )
 from src.retrieval.bm25 import BM25Index
-from src.retrieval.semantic.builder import build_semantic_index
+from src.retrieval.semantic.builder import (
+    DocumentFilter,
+    build_semantic_index,
+)
 from src.retrieval.semantic.config import SemanticEncoderConfig
 from src.retrieval.semantic.encoder import MiniLMEncoder
 from src.retrieval.semantic.models import SemanticHit
@@ -76,6 +79,7 @@ def build_and_store_semantic_index(
     *,
     corpus_fingerprint: str,
     pipeline_fingerprint: str,
+    include: DocumentFilter | None = None,
     clock: Callable[[], float] = perf_counter,
 ) -> SemanticIndexBuildReport:
     """Load MiniLM, encode BM25 documents, and publish one snapshot."""
@@ -87,6 +91,7 @@ def build_and_store_semantic_index(
     semantic_index = build_semantic_index(
         lexical_index,
         MiniLMEncoder(config, backend),
+        include=include,
     )
     encoding_finished = clock()
 

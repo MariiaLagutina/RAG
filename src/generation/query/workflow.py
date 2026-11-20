@@ -92,11 +92,14 @@ def answer_query(
         HuggingFaceTokenCounter(backend.tokenizer),
         context_token_budget,
     )
+    # Match batch generation: labels are optional, but any label the model
+    # does write must still reference a source that was in the prompt.
     grounded_answer = generate_grounded_answer(
         question,
         context,
         backend,
         generation_config,
+        citations_required=False,
     )
     result = QueryAnswerResult(
         answer=grounded_answer.answer,

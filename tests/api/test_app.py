@@ -9,6 +9,7 @@ import pytest
 
 from src.api import create_app
 from src.generation import (
+    INSUFFICIENT_CONTEXT_RESPONSE,
     ContextBuildResult,
     GroundedAnswerResult,
     LoadedGenerationBackend,
@@ -169,6 +170,72 @@ def test_answer_returns_grounded_result_using_preloaded_state(
         "prompt_version": "v1",
         "cache_hit": False,
     }
+
+
+def _post_answer_with_generated_text(
+    tmp_path: Path,
+    generated_text: str,
+) -> tuple[int, dict[str, object]]:
+    """Run /answer with real validation and one fixed model output."""
+    client = TestClient(_build_app(tmp_path))
+    source = MinimalSource(
+        file_path="corpus/cache.md",
+        first_character_index=0,
+        last_character_index=5,
+    )
+    context = ContextBuildResult(
+        context="[Source 1] corpus/cache.md:0-5\ncache",
+        sources=(source,),
+        used_tokens=6,
+        skipped_source_count=0,
+    )
+    with (
+        patch(
+            "src.api.state.load_generation_backend",
+            return_value=_fake_backend(),
+        ),
+        patch("src.api.app.build_context", return_value=context),
+        patch(
+            "src.generation.prompt.workflow.generate_answer",
+            return_value=generated_text,
+        ),
+    ):
+        response = client.post(
+            "/answer", json={"question": "Where is cache?", "k": 1}
+        )
+    return response.status_code, response.json()
+
+
+@pytest.mark.parametrize(
+    "generated_text",
+    [
+        "The cache stores search results.",
+        "The cache stores search results. [Source 1]",
+        INSUFFICIENT_CONTEXT_RESPONSE,
+    ],
+    ids=["uncited", "valid-citation", "insufficient-context"],
+)
+def test_answer_accepts_answers_allowed_by_the_shared_citation_policy(
+    tmp_path: Path,
+    generated_text: str,
+) -> None:
+    status_code, body = _post_answer_with_generated_text(
+        tmp_path, generated_text
+    )
+
+    assert status_code == 200
+    assert body["answer"] == generated_text
+
+
+def test_answer_rejects_a_label_outside_the_prompt_sources(
+    tmp_path: Path,
+) -> None:
+    status_code, body = _post_answer_with_generated_text(
+        tmp_path, "The cache stores search results. [Source 2]"
+    )
+
+    assert status_code == 400
+    assert "outside the prompt context" in str(body["detail"])
 
 
 def test_answer_loads_generation_backend_once_across_requests(

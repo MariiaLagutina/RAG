@@ -34,12 +34,32 @@ class BM25Document:
     content_terms: tuple[str, ...]
     metadata_terms: tuple[str, ...] = ()
     identifier_terms: tuple[str, ...] = ()
+    content_length: int | None = None
 
     def __post_init__(self) -> None:
         """Require immutable collections of non-empty normalized terms."""
         _validate_terms("content_terms", self.content_terms)
         _validate_terms("metadata_terms", self.metadata_terms)
         _validate_terms("identifier_terms", self.identifier_terms)
+        if self.content_length is not None and (
+            type(self.content_length) is not int
+            or not 0 < self.content_length <= len(self.content_terms)
+        ):
+            raise ValueError(
+                "BM25 content length must be a positive integer no larger "
+                "than the number of content terms"
+            )
+
+    @property
+    def scoring_content_length(self) -> int:
+        """Return the length used for content BM25 normalization.
+
+        Derived identifier parts are extra matching signals, not extra
+        words, so a document may declare its original lexical length.
+        """
+        if self.content_length is None:
+            return len(self.content_terms)
+        return self.content_length
 
     @property
     def key(self) -> tuple[str, int, int]:

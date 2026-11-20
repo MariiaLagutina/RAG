@@ -41,12 +41,25 @@ def test_markdown_chunker_packs_blocks_inside_one_section() -> None:
     assert chunks[0].section_path == ("Install",)
 
 
+def test_markdown_chunker_keeps_a_document_that_fits_in_one_chunk() -> None:
+    """A short page keeps its title and every section together."""
+    source = "# Guide\nIntro.\n## Linux\nUse uv.\n## macOS\nUse brew.\n"
+    document = make_text_document(source)
+
+    chunks = chunk_text_document(document)
+
+    assert len(chunks) == 1
+    assert chunks[0].text == source
+    assert chunks[0].section_path == ("Guide",)
+
+
 def test_markdown_chunker_starts_a_chunk_for_each_heading_path() -> None:
     """Content from different Markdown sections is not packed together."""
     source = "# Guide\nIntro.\n## Linux\nUse uv.\n## macOS\nUse brew.\n"
     document = make_text_document(source)
 
-    chunks = chunk_text_document(document)
+    # The document must exceed one chunk for heading-based packing to apply.
+    chunks = chunk_text_document(document, max_chunk_size=len(source) - 1)
 
     assert [chunk.section_path for chunk in chunks] == [
         ("Guide",),
@@ -73,7 +86,8 @@ def test_markdown_chunker_keeps_fenced_code_inside_its_section() -> None:
     )
     document = make_text_document(source)
 
-    chunks = chunk_text_document(document)
+    # The document must exceed one chunk for heading-based packing to apply.
+    chunks = chunk_text_document(document, max_chunk_size=len(source) - 1)
 
     assert [chunk.section_path for chunk in chunks] == [
         ("Guide",),

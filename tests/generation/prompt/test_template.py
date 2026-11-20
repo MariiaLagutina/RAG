@@ -1,4 +1,4 @@
-"""Tests for grounded prompt template version v1."""
+"""Tests for the grounded answer prompt template."""
 
 import pytest
 
@@ -21,12 +21,12 @@ def _context(text: str) -> ContextBuildResult:
 
 
 def test_prompt_version_and_grounding_rules_are_explicit() -> None:
-    """Version v1 defines source use, citations, conflicts, and fallback."""
+    """The prompt defines source use, citations, conflicts, and fallback."""
     system, _ = build_grounded_messages(
         "Where is caching defined?", _context("x")
     )
 
-    assert GROUNDING_PROMPT_VERSION == "v1"
+    assert GROUNDING_PROMPT_VERSION == "v2"
     assert system.role == "system"
     assert (
         "Use only facts supported by the retrieved sources"
@@ -34,9 +34,19 @@ def test_prompt_version_and_grounding_rules_are_explicit() -> None:
     )
     assert "Do not invent APIs" in system.content
     assert "End every supported factual sentence" in system.content
-    assert "When sources disagree" in system.content
-    assert "Conflicting evidence is not insufficient" in system.content
+    assert "Only when sources genuinely disagree" in system.content
     assert INSUFFICIENT_CONTEXT_RESPONSE in system.content
+
+
+def test_prompt_has_no_conflict_prefix_for_the_model_to_echo() -> None:
+    """No quoted conflict prefix exists for the model to copy."""
+    system, user = build_grounded_messages(
+        "Where is caching defined?", _context("x")
+    )
+
+    for message in (system, user):
+        assert "The sources conflict" not in message.content
+    assert system.content.count("disagree") == 1
 
 
 def test_prompt_preserves_labelled_context_under_separate_delimiters() -> None:
@@ -56,8 +66,7 @@ def test_prompt_preserves_labelled_context_under_separate_delimiters() -> None:
         f"{context}\n"
         "</retrieved_sources>\n\n"
         "<answer_task>\n"
-        "Compare all relevant sources. If they disagree, begin with "
-        '"The sources conflict:". Answer with source labels.\n'
+        "Answer the question with source labels.\n"
         "</answer_task>"
     )
 

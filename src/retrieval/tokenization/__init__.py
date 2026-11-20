@@ -6,10 +6,11 @@ from src.retrieval.tokenization.query import (
     require_searchable_query,
 )
 from src.retrieval.tokenization.shared import scan_tokens
-from src.retrieval.tokenization.text import TextTokenizer
+from src.retrieval.tokenization.text import ContentTextTokenizer, TextTokenizer
 
 __all__ = [
     "CodeTokenizer",
+    "ContentTextTokenizer",
     "QueryTokenizer",
     "TextTokenizer",
     "require_searchable_query",
