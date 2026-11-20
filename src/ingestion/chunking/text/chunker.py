@@ -53,12 +53,19 @@ def chunk_text_document(
         if suffix == ".md"
         else _plain_text_blocks(document.text)
     )
-    candidates = _pack_blocks(
-        document.text,
-        blocks,
-        max_chunk_size,
-        overlap_size,
-    )
+    if len(document.text) <= max_chunk_size and blocks:
+        # A document that already fits in one chunk stays whole, so a short
+        # page keeps its title and body terms together for retrieval.
+        candidates = [
+            _ChunkCandidate(0, len(document.text), blocks[0].section_path)
+        ]
+    else:
+        candidates = _pack_blocks(
+            document.text,
+            blocks,
+            max_chunk_size,
+            overlap_size,
+        )
 
     return [
         make_chunk(

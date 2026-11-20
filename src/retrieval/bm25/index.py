@@ -11,6 +11,19 @@ from src.retrieval.bm25.models import (
     BM25Parameters,
 )
 
+# Question words match question-like headings ("What to Expect ...") in the
+# short metadata field and outrank relevant content. They are ignored for
+# that field only; content scoring still uses every query term.
+METADATA_FUNCTION_WORDS = frozenset(
+    {
+        "a", "an", "and", "are", "as", "at", "be", "by", "can", "do",
+        "does", "for", "from", "how", "i", "in", "is", "it", "its", "of",
+        "on", "or", "should", "that", "the", "this", "to", "was", "what",
+        "when", "where", "which", "who", "why", "with", "would", "you",
+        "your",
+    }
+)
+
 
 class BM25Index:
     """Rank immutable chunk documents with separate field statistics."""
@@ -104,7 +117,9 @@ class BM25Index:
             self._statistics.average_content_length,
         )
         metadata_scores = self._score_field(
-            terms,
+            tuple(
+                term for term in terms if term not in METADATA_FUNCTION_WORDS
+            ),
             self._metadata_postings,
             self._metadata_lengths,
             self._statistics.average_metadata_length,

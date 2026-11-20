@@ -6,6 +6,10 @@ import pytest
 
 from src.retrieval.bm25 import BM25Parameters
 from src.retrieval.index_store import PipelineConfig, fingerprint_pipeline
+from src.retrieval.index_store.pipeline import (
+    CHUNKER_VERSION,
+    TOKENIZER_VERSION,
+)
 
 
 def fingerprint(
@@ -33,8 +37,8 @@ def test_pipeline_fingerprint_is_stable_sha256() -> None:
     "changed",
     [
         PipelineConfig(max_chunk_size=1000),
-        PipelineConfig(chunker_version=2),
-        PipelineConfig(tokenizer_version=3),
+        PipelineConfig(chunker_version=CHUNKER_VERSION + 1),
+        PipelineConfig(tokenizer_version=TOKENIZER_VERSION + 1),
         PipelineConfig(parameters=BM25Parameters(k1=1.2)),
         PipelineConfig(parameters=BM25Parameters(b=0.5)),
         PipelineConfig(parameters=BM25Parameters(metadata_weight=1.5)),
