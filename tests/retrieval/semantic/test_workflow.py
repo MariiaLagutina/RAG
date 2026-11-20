@@ -52,7 +52,7 @@ def test_build_workflow_measures_model_encoding_and_save_separately(
         )
 
     encoder_type.assert_called_once_with(config, backend)
-    build.assert_called_once_with(lexical_index, encoder)
+    build.assert_called_once_with(lexical_index, encoder, include=None)
     store_type.return_value.save.assert_called_once_with(
         semantic_index,
         corpus_fingerprint="a" * 64,
